@@ -62,7 +62,7 @@ data = df.values # convert to numpy array (2dim)
 category = 'Alkoholunfälle'
 type = 'insgesamt'
 desyear = 2021
-desmonth = 2
+desmonth = 12
 
 dataset = data[(df["MONATSZAHL"] == category) & (df["AUSPRAEGUNG"] == type) & (df["MONAT"] != 'Summe') & (df["WERT"].notnull()) & (df["VORJAHRESWERT"].notnull())]# & (df["JAHR"] != 2020)] # filter 
 
@@ -95,7 +95,12 @@ y = y.reshape((y.shape[0],1))
 #print(x.shape)
 #print(y.shape)
 
-poldeg = 3
+# higher degree for forecasts in near future - overall more adaptive and no overfitting model / oversized values
+if(desyear < 2022):
+    poldeg = 3
+else:
+    poldeg = 2
+
 x = PolynomialFeatures(degree=poldeg).fit_transform(x_)
 
 model = LinearRegression().fit(x, y)
@@ -160,26 +165,43 @@ lastyear = int(sortdata[-1, 0])
 lastmonth = int(sortdata[-1, 1]) - 100 * lastyear
 
 # Generate forecasts row by row
-for j in range(lastmonth+1,12+1):
-    (appenddata, currdata) = CreateData(j,lastyear,sortdata,currdata,model,poldeg)
-    sortdata = np.vstack([sortdata, appenddata])
+if desyear < lastyear:
+    returnvalue = yhat[sortdata[:,3] == desdate, 0]
 
-for i in range(desyear-lastyear-1):
-    for j in range(1,12+1):
-        (appenddata, currdata) = CreateData(j,lastyear+i+1,sortdata,currdata,model,poldeg)
+elif desyear == lastyear:
+    if desmonth <= lastmonth:
+        returnvalue = yhat[sortdata[:,3] == desdate, 0]
+
+    else:
+        for j in range(lastmonth+1,desmonth+1):
+            (appenddata, currdata) = CreateData(j,desyear,sortdata,currdata,model,poldeg)
+            sortdata = np.vstack([sortdata, appenddata])
+
+        returnvalue = sortdata[-1,2]
+
+else:
+    for j in range(lastmonth+1,12+1):
+        (appenddata, currdata) = CreateData(j,lastyear,sortdata,currdata,model,poldeg)
         sortdata = np.vstack([sortdata, appenddata])
 
-for j in range(1,desmonth+1):
-    (appenddata, currdata) = CreateData(j,desyear,sortdata,currdata,model,poldeg)
-    #print(sortdata)
-    #print(appenddata)
-    #print(sortdata.shape)
-    sortdata = np.vstack([sortdata, appenddata])
-    sortdata[-1,0] = float(sortdata[-1,0])
-    #print(sortdata)
-    #print(sortdata.shape)
+    for i in range(desyear-lastyear-1):
+        for j in range(1,12+1):
+            (appenddata, currdata) = CreateData(j,lastyear+i+1,sortdata,currdata,model,poldeg)
+            sortdata = np.vstack([sortdata, appenddata])
 
-print(sortdata[-1,2])
+    for j in range(1,desmonth+1):
+        (appenddata, currdata) = CreateData(j,desyear,sortdata,currdata,model,poldeg)
+        #print(sortdata)
+        #print(appenddata)
+        #print(sortdata.shape)
+        sortdata = np.vstack([sortdata, appenddata])
+        sortdata[-1,0] = float(sortdata[-1,0])
+        #print(sortdata)
+        #print(sortdata.shape)
+
+    returnvalue = sortdata[-1,2]
+
+print(returnvalue)
 
 plt.figure(figsize=(16,8))
 plt.plot(sortdata[:,1], sortdata[:,2], 'r')
