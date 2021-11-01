@@ -47,28 +47,23 @@ def CreateData(month, year, sortdata, currdata, model, poldeg):
 
 # CSV read
 df = pd.read_csv("../../210619monatszahlenjuni2021monatszahlen2106verkehrsunfaelle.csv")#, usecols=["MONATSZAHL","AUSPRAEGUNG","JAHR","MONAT","WERT"])
-#print(df['VORJAHRESWERT'])
-#print(df['JAHR'])
 #print(df)
 
 data = df.values # convert to numpy array (2dim)
-
 #print(data)
-#print(df['JAHR'])
-#print(data[:,3]) #month
 
 
 # Put data in format
 category = 'Alkoholunfälle'
 type = 'insgesamt'
-desyear = 2021
-desmonth = 12
+try:
+    desyear = int(input('year:'))
+    desmonth = int(input('month:'))
+except ValueError:
+    print("Not a number")
 
 dataset = data[(df["MONATSZAHL"] == category) & (df["AUSPRAEGUNG"] == type) & (df["MONAT"] != 'Summe') & (df["WERT"].notnull()) & (df["VORJAHRESWERT"].notnull())]# & (df["JAHR"] != 2020)] # filter 
-
 #print(dataset)
-#print(dataset.shape)
-#print(data.shape)
 
 sortdata = sorted(dataset, key=lambda x: x[3]) # sort by date
 sortdata = np.array(sortdata)
@@ -79,13 +74,13 @@ sortdata = np.delete(sortdata, [0, 1], axis=1) # delete columns MONATSZAHL and A
 
 tmp = sortdata[-1,4:7]
 currdata = deepcopy(tmp)
-#print(currdata)
 
 sortdata[1:,4:7] = sortdata[0:-1,4:7] # shift data to next index, where it is known -> input parameter definition
-#print(currdata)
 sortdata = np.delete(sortdata, (0), axis=0) # delete first row
+
 #plt.scatter(sortdata[:,3], sortdata[:,4])
 #plt.show()
+
 
 # Create model
 x_ = sortdata[:,[1, 3, 4, 5, 6]]
@@ -95,8 +90,7 @@ y = y.reshape((y.shape[0],1))
 #print(x.shape)
 #print(y.shape)
 
-# higher degree for forecasts in near future - overall more adaptive and no overfitting model / oversized values
-if(desyear < 2022):
+if(desyear < 2022): # higher degree for forecasts in near future - overall more adaptive and no overfitting model / oversized values
     poldeg = 3
 else:
     poldeg = 2
@@ -106,7 +100,7 @@ x = PolynomialFeatures(degree=poldeg).fit_transform(x_)
 model = LinearRegression().fit(x, y)
 score = model.score(x, y)
 
-print("coefficient of determination:", score)
+print("\ncoefficient of determination:", score)
 
 yhat = model.predict(x)
 yhat = np.array(yhat)
@@ -115,56 +109,25 @@ result[:,0] = sortdata[:,2]
 result[:,1] = yhat[:,0]
 #print(result)
 
-plt.figure(figsize=(16,8))
-plt.plot(sortdata[:,1], result[:,0], 'g')
-plt.plot(sortdata[:,1], result[:,1], 'r')
-plt.show()
-
-
-## Test model
-#year = "2021"
-#month = "9"
-#if(len(month) == 1):
-#    month = "0" + month
-#
-#newdata = data[(df["MONATSZAHL"] == category) & (df["AUSPRAEGUNG"] == type) & (df["MONAT"] == (year + month))]
-##newdata = data[(df["MONATSZAHL"] == category) & (df["AUSPRAEGUNG"] == type) & (df["MONAT"] != 'Summe') & (df["JAHR"] == 2021)]
-#newdata = np.array(newdata)
-#xnew_ = newdata[:,[3, 5]]
-
-
-#xnew = PolynomialFeatures(degree=poldeg).fit_transform(xnew_)
-#ynew = model.predict(xnew)
-#print(xnew)
-#print(ynew)
-
-#xrealplot = np.concatenate((sortdata[:,1],np.array(xnew_[:,0])))
-#xpredplot = np.array(xnew_[:,0])
-#yrealplot = np.concatenate((sortdata[:,2],newdata[:,4]))
-#ypredplot = np.array(ynew[:,0])
-#print(xnew_[:,0])
-#print(yrealplot)
-#print(ynew[:,0])
-
 #plt.figure(figsize=(16,8))
-#plt.plot(xrealplot, yrealplot, 'g')
-#plt.plot(xpredplot, ypredplot, 'r')
+#plt.plot(sortdata[:,1], result[:,0], 'g')
+#plt.plot(sortdata[:,1], result[:,1], 'r')
 #plt.show()
 
 
 # Auto complete method
+recordeddataInd = sortdata.shape[0]
 
 # Date format transformation 
 desdate = "" + str(desyear)
 if desmonth < 10:
     desdate += "0" + str(desmonth)
 
-#print(desdate)
-
 lastyear = int(sortdata[-1, 0])
 lastmonth = int(sortdata[-1, 1]) - 100 * lastyear
 
 # Generate forecasts row by row
+np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning) # ragged array known
 if desyear < lastyear:
     returnvalue = yhat[sortdata[:,3] == desdate, 0]
 
@@ -191,18 +154,49 @@ else:
 
     for j in range(1,desmonth+1):
         (appenddata, currdata) = CreateData(j,desyear,sortdata,currdata,model,poldeg)
-        #print(sortdata)
         #print(appenddata)
-        #print(sortdata.shape)
         sortdata = np.vstack([sortdata, appenddata])
         sortdata[-1,0] = float(sortdata[-1,0])
         #print(sortdata)
-        #print(sortdata.shape)
 
     returnvalue = sortdata[-1,2]
 
-print(returnvalue)
+print("prediction:", returnvalue)
 
-plt.figure(figsize=(16,8))
-plt.plot(sortdata[:,1], sortdata[:,2], 'r')
-plt.show()
+
+if input('\nPlot data? y/n\n') == "y":
+    # Plot final result
+    # xaxis creation
+    xplot = []
+    xlines = []
+    curryear = -1
+    NaN = float("NaN")
+
+    for i in range(sortdata.shape[0]):
+        if curryear != sortdata[i,0]:
+            xplot = np.append(xplot, sortdata[i,1][0:4])
+            xlines = np.append(xlines, sortdata[i,1])
+            curryear = sortdata[i,0]
+        else:
+            xplot = np.append(xplot, '')
+    #print(xplot)
+    #print(xlines)
+
+    plt.figure(figsize=(16,8))
+
+    plt.plot(sortdata[:recordeddataInd,1], sortdata[:recordeddataInd,2], 'g', linewidth=2, label="Available data") # Date vs. real val
+    plt.scatter(sortdata[:recordeddataInd,1], sortdata[:recordeddataInd,2], color='green')
+    plt.plot(sortdata[recordeddataInd-1:,1], sortdata[recordeddataInd-1:,2], 'r', linewidth=2, label="Prediction") # Date vs. forecast val
+    plt.scatter(sortdata[recordeddataInd:,1], sortdata[recordeddataInd:,2], color='red')
+
+    plt.xticks(sortdata[:,1], xplot)
+    plt.grid(axis='y')
+    for xc in xlines:
+        plt.axvline(x=xc, linewidth=0.5, color='k')
+
+    plt.legend(loc="upper right", fontsize=16)
+    plt.title("Car Accidents caused by Alcohol per month", fontsize=20)
+    plt.xlabel("Date", fontsize=14)
+    plt.ylabel("No of Accidents", fontsize=14)
+
+    plt.show()
